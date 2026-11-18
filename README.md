@@ -5,7 +5,7 @@ Solução de **Retrieval-Augmented Generation (RAG)** que transforma as avaliaç
 em uma base de conhecimento explorável por perguntas em linguagem natural, com **respostas
 fundamentadas em evidências rastreáveis** (cada insight cita as avaliações que o sustentam).
 
-> 🚧 **Status:** estrutura base e pipeline implementados. Pendências na seção [Próximos passos](#próximos-passos).
+> 🎥 **Vídeo de apresentação:** _LINK_DO_VIDEO_
 
 ---
 
@@ -48,7 +48,7 @@ as avaliações que a comprovam**.
                                     corte por similaridade mínima + dedup + MMR
                                                           │
                      ┌── < MIN_EVIDENCES ──► "sem evidências suficientes" (sem LLM)
-                     └── ok ──► contexto <evidencias> ──► Claude ──► resposta com [R#]
+                     └── ok ──► contexto <evidencias> ──► Gemini ──► resposta com [R#]
                                                                     + tabela de evidências
                 └─────────────────────────────────────────────────────┘
 ```
@@ -59,7 +59,7 @@ as avaliações que a comprovam**.
 tech-challenge-fase4/
 ├── app.py                  # interface Streamlit (perguntas, filtros, evidências)
 ├── requirements.txt
-├── .env.example            # ANTHROPIC_API_KEY e parâmetros opcionais
+├── .env.example            # GEMINI_API_KEY (ou ANTHROPIC_API_KEY) e parâmetros opcionais
 ├── scripts/
 │   └── download_data.py    # download do dataset via kagglehub
 ├── src/
@@ -68,7 +68,7 @@ tech-challenge-fase4/
 │   ├── embeddings.py       # carregamento do modelo de embeddings
 │   ├── build_index.py      # geração de embeddings e indexação no ChromaDB
 │   ├── retriever.py        # transformação da pergunta, busca, limiar, MMR
-│   ├── generator.py        # construção do contexto e geração (Claude)
+│   ├── generator.py        # construção do contexto e geração (Gemini / Claude)
 │   └── rag.py              # orquestração + CLI
 ├── data/                   # raw/, processed/, chroma/ (não versionados)
 ├── notebooks/              # análise exploratória e avaliação (a fazer)
@@ -80,7 +80,7 @@ tech-challenge-fase4/
 ```bash
 python -m venv .venv && .venv\Scripts\activate     # Windows (Linux/Mac: source .venv/bin/activate)
 pip install -r requirements.txt
-copy .env.example .env                              # e preencha ANTHROPIC_API_KEY
+copy .env.example .env                              # e preencha GEMINI_API_KEY (gratuita em aistudio.google.com)
 
 python scripts/download_data.py                     # 1. baixa os CSVs para data/raw
 python -m src.data_prep                             # 2. gera data/processed/review_documents.parquet
@@ -90,7 +90,8 @@ python -m src.rag "Quais são os principais problemas relatados pelos clientes?"
 streamlit run app.py                                                              # interface
 ```
 
-Sem `ANTHROPIC_API_KEY`, o sistema funciona em **modo somente recuperação** (exibe as evidências).
+Sem chave de LLM, o sistema funciona em **modo somente recuperação** (exibe as evidências).
+Também é possível usar Claude (Anthropic) definindo `ANTHROPIC_API_KEY` no lugar da chave do Gemini.
 
 ## 5. Construção da base de conhecimento
 
@@ -118,7 +119,8 @@ Indexação completa (e5-small, CPU): ~7,5 min.
 4. **Seleção**: corte por similaridade mínima, deduplicação e **MMR** (relevância × diversidade)
    → 15 evidências.
 5. **Contexto**: evidências em blocos `<avaliacao ref="R#" nota=... categoria=... entrega=...>`.
-6. **Geração** com Claude (`claude-opus-5-5`), instruído a citar `[R#]` em toda afirmação.
+6. **Geração** com Google Gemini (`gemini-3.1-flash-lite`, com fallback automático para outros modelos
+   Gemini em caso de indisponibilidade), instruído a citar `[R#]` em toda afirmação. Tempo médio: ~5 s por pergunta.
 
 ## 7. Respostas fundamentadas e tratamento de falta de evidências
 
@@ -134,7 +136,7 @@ Indexação completa (e5-small, CPU): ~7,5 min.
 Filtros disponíveis (inferidos ou manuais na interface): nota, sentimento, categoria do produto,
 situação da entrega (atrasado/no prazo/não entregue), ano da compra. Restringir o espaço de busca
 antes da similaridade aumenta a precisão para perguntas como *"principais problemas nas avaliações
-com nota baixa"*. *(Análise comparativa com/sem filtros a preencher.)*
+com nota baixa"*. Exemplo: em "clientes insatisfeitos", o filtro nota ≤ 2 é aplicado automaticamente e as 15 evidências passam a ser só reclamações.
 
 ## 9. Tecnologias e justificativas
 
@@ -142,32 +144,36 @@ com nota baixa"*. *(Análise comparativa com/sem filtros a preencher.)*
 |---|---|---|
 | Embeddings | `intfloat/multilingual-e5-small` (sentence-transformers) | Bom em português, roda em CPU, gratuito/local |
 | Banco vetorial | ChromaDB (persistente) | Simples, local, suporta filtros por metadados |
-| LLM | Claude (`claude-opus-5-5`, Anthropic SDK) | Forte aderência a instruções de citação e recusa |
+| LLM | Google Gemini (`gemini-3.1-flash-lite`, SDK `google-genai`) | Cota gratuita, baixa latência (~5 s), boa aderência a instruções de citação e recusa. Claude suportado como alternativa |
 | Interface | Streamlit | Demonstração rápida com filtros e tabela de evidências |
 | Dados | pandas + parquet | Base intermediária reprodutível |
 
 ## 10. Exemplos de perguntas e respostas
 
-*(A preencher com saídas reais — ver `reports/`.)*
+Resultados reais gerados por `python scripts/evaluate.py --llm` — respostas completas e evidências em
+[`reports/exemplos_com_llm.md`](reports/exemplos_com_llm.md).
+
+| Escopo | Pergunta | Resultado |
+|---|---|---|
+| dentro | Quais são os principais problemas relatados pelos clientes? | ✅ resposta por temas com citações |
+| dentro | O que os clientes relatam sobre problemas relacionados à entrega? | ✅ 4 temas: não entrega/atraso, rastreamento e atendimento, Correios, status "entregue" indevido/produto trocado |
+| dentro | Quais aspectos da experiência de compra são mais elogiados? | ✅ filtro nota ≥ 4 inferido |
+| dentro | Quais padrões nas avaliações de clientes insatisfeitos? | ✅ filtro nota ≤ 2 inferido |
+| dentro | Quais avaliações sustentam problemas recorrentes de prazo de entrega? | ✅ |
+| dentro | Padrões recorrentes relacionados à qualidade dos produtos? | ✅ |
+| fora | Qual é a capital da Austrália? | 🛑 Guarda 1 — nenhuma evidência acima do limiar, LLM não chamado |
+| fora | Como funciona a fotossíntese? | 🛑 Guarda 2 — LLM responde SEM_EVIDENCIAS |
+| fora | Previsão do tempo em São Paulo? | 🛑 Guarda 2 |
+| fora | O que acham do atendimento por chatbot com IA? | 🛑 Guarda 2 (tema inexistente na base) |
+
+**10/10 comportamentos corretos.** Os casos "fora" mostram por que as duas guardas são necessárias:
+a similaridade sozinha (0,86 para "fotossíntese") não separa perguntas fora do escopo.
 
 ## 11. Limitações e evoluções futuras
 
-- Limiar de similaridade precisa de calibração empírica (e5 gera similaridades comprimidas).
+- O limiar de similaridade sozinho não detecta perguntas fora do escopo (e5 gera similaridades
+  comprimidas); hoje isso é coberto pela guarda no LLM.
+- Modelos maiores do Gemini (cota gratuita) frequentemente retornam 503 por alta demanda; por isso há fallback.
 - Respostas descrevem a amostra recuperada, não estatísticas da base inteira.
 - Evoluções: busca híbrida (BM25 + vetorial), re-ranking com cross-encoder, multi-query via LLM,
   avaliação sistemática (precisão de recuperação, fidelidade das respostas).
-
----
-
-## Próximos passos
-
-- [x] Executar download, preparação e indexação completa; registrar números da base
-- [x] Script de avaliação (`scripts/evaluate.py`) — saída em `reports/avaliacao_recuperacao.md`
-- [ ] **Detecção de fora do escopo:** a similaridade sozinha NÃO separa bem (dentro: 0,86–0,90;
-      "fotossíntese": 0,86; só "capital da Austrália" caiu abaixo de 0,80). Opções: re-ranker
-      cross-encoder com limiar, ou classificador de relevância/escopo via LLM antes da geração
-- [ ] Configurar `ANTHROPIC_API_KEY` no `.env` e rodar `python scripts/evaluate.py --llm`
-- [ ] Notebook de EDA das avaliações
-- [ ] Avaliar melhorias (híbrido/re-rank/multi-query) e justificar escolhas
-- [ ] Roteiro e gravação do vídeo (≤ 7 min)
-- [ ] Publicar repositório no GitHub
