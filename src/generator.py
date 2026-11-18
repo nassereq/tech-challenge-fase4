@@ -1,10 +1,10 @@
-"""Construção do contexto e geração da resposta fundamentada (Claude)."""
+"""Construção do contexto e geração da resposta fundamentada (Gemini ou Claude)."""
 from __future__ import annotations
 
 import os
 import re
 
-from src.config import LLM_EFFORT, LLM_MAX_TOKENS, LLM_MODEL
+from src.config import GEMINI_MODEL, LLM_EFFORT, LLM_MAX_TOKENS, LLM_MODEL
 from src.retriever import Evidence
 
 SYSTEM_PROMPT = """Você é um analista de Voice of Customer de um e-commerce brasileiro.
@@ -39,16 +39,40 @@ def cited_refs(answer: str) -> list[str]:
     return sorted(set(re.findall(r"\[(R\d+)\]", answer)), key=lambda r: int(r[1:]))
 
 
+def provider() -> str | None:
+    """Gemini (cota gratuita) tem prioridade; Claude se houver chave da Anthropic."""
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        return "gemini"
+    if os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"):
+        return "claude"
+    return None
+
+
 def has_llm() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
+    return provider() is not None
+
+
+def _call_gemini(user_msg: str) -> tuple[str, dict]:
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client()  # lê GEMINI_API_KEY do ambiente
+    resp = client.models.generate_content(
+        model=GEMINI_MODEL, contents=user_msg,
+        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.2))
+    return (resp.text or "").strip(), {}
 
 
 def generate(question: str, evidences: list[Evidence]) -> dict:
-    """Chama o Claude com as evidências. Retorna texto, refs citadas e status."""
+    """Chama o LLM com as evidências. Retorna texto, refs citadas e status."""
+    user_msg = f"{build_context(evidences)}\n\n<pergunta>{question}</pergunta>"
+    if provider() == "gemini":
+        text, usage = _call_gemini(user_msg)
+        return _finish(text, evidences, usage)
+
     import anthropic
 
     client = anthropic.Anthropic()
-    user_msg = f"{build_context(evidences)}\n\n<pergunta>{question}</pergunta>"
 
     # fallbacks="default": se o modelo recusar por política de segurança, a própria API
     # repete a requisição num modelo de fallback (beta server-side-fallback).
@@ -65,6 +89,11 @@ def generate(question: str, evidences: list[Evidence]) -> dict:
         return {"status": "refusal", "answer": "O modelo recusou a solicitação.", "cited": []}
 
     text = "".join(b.text for b in resp.content if b.type == "text").strip()
+    return _finish(text, evidences, {"input_tokens": resp.usage.input_tokens,
+                                     "output_tokens": resp.usage.output_tokens})
+
+
+def _finish(text: str, evidences: list[Evidence], usage: dict) -> dict:
     if text.startswith("SEM_EVIDENCIAS"):
         return {"status": "insufficient", "answer": text.split(":", 1)[-1].strip(), "cited": []}
 
@@ -73,5 +102,4 @@ def generate(question: str, evidences: list[Evidence]) -> dict:
     return {"status": "ok", "answer": text,
             "cited": [r for r in cited if r in valid],
             "invalid_citations": [r for r in cited if r not in valid],
-            "usage": {"input_tokens": resp.usage.input_tokens,
-                      "output_tokens": resp.usage.output_tokens}}
+            "usage": usage}

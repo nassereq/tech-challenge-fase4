@@ -7,3 +7,4 @@ anthropic>=0.70
 python-dotenv>=1.0
 streamlit>=1.38
 tqdm>=4.66
+google-genai>=1.0

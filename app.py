@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import DOCS_PARQUET
-from src.generator import has_llm
+from src.generator import has_llm, provider
 from src.rag import answer
 
 st.set_page_config(page_title="VoC Intelligence — Olist", layout="wide")
@@ -40,7 +40,7 @@ with st.sidebar:
     delivery = st.multiselect("Situação da entrega", ["atrasado", "no_prazo", "nao_entregue"])
     years = st.multiselect("Ano da compra", [2016, 2017, 2018])
     st.divider()
-    st.write("LLM:", "✅ Claude configurado" if has_llm() else "⚠️ sem chave — só recuperação")
+    st.write("LLM:", "✅ " + provider().capitalize() + " configurado" if has_llm() else "⚠️ sem chave — só recuperação")
 
 filters = {}
 if score != (1, 5):
