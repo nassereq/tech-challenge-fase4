@@ -36,7 +36,10 @@ def build_context(evidences: list[Evidence]) -> str:
 
 
 def cited_refs(answer: str) -> list[str]:
-    return sorted(set(re.findall(r"\[(R\d+)\]", answer)), key=lambda r: int(r[1:]))
+    # aceita [R1] e também [R1, R2, R5]
+    refs = {r for grp in re.findall(r"\[(R\d+(?:\s*,\s*R\d+)*)\]", answer)
+            for r in re.findall(r"R\d+", grp)}
+    return sorted(refs, key=lambda r: int(r[1:]))
 
 
 def provider() -> str | None:
