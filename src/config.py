@@ -38,4 +38,5 @@ MIN_EVIDENCES = 3          # mínimo de evidências para gerar resposta
 LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
 LLM_EFFORT = os.getenv("LLM_EFFORT", "medium")
 LLM_MAX_TOKENS = 4000
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+# Ordem de tentativa: o primeiro que responder. Modelos maiores costumam dar 503 (alta demanda).
+GEMINI_MODELS = [m.strip() for m in os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite,gemini-3.8-flash,gemini-2.5-flash-lite").split(",")]

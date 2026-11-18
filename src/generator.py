@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import re
 
-from src.config import GEMINI_MODEL, LLM_EFFORT, LLM_MAX_TOKENS, LLM_MODEL
+from src.config import GEMINI_MODELS, LLM_EFFORT, LLM_MAX_TOKENS, LLM_MODEL
 from src.retriever import Evidence
 
 SYSTEM_PROMPT = """Você é um analista de Voice of Customer de um e-commerce brasileiro.
@@ -60,10 +60,19 @@ def _call_gemini(user_msg: str) -> tuple[str, dict]:
     from google.genai import types
 
     client = genai.Client()  # lê GEMINI_API_KEY do ambiente
-    resp = client.models.generate_content(
-        model=GEMINI_MODEL, contents=user_msg,
-        config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT, temperature=0.2))
-    return (resp.text or "").strip(), {}
+    # Sem retentativas longas: se um modelo estiver sobrecarregado (503), passa ao próximo.
+    http = types.HttpOptions(timeout=90_000, retry_options=types.HttpRetryOptions(attempts=1))
+    last_err = None
+    for model in GEMINI_MODELS:
+        try:
+            resp = client.models.generate_content(
+                model=model, contents=user_msg,
+                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT,
+                                                   temperature=0.2, http_options=http))
+            return (resp.text or "").strip(), {"model": model}
+        except Exception as e:  # 503/404/timeout -> tenta o próximo modelo
+            last_err = e
+    raise RuntimeError(f"Nenhum modelo Gemini disponível no momento: {last_err}")
 
 
 def generate(question: str, evidences: list[Evidence]) -> dict:
