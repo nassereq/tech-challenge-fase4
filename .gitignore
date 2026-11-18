@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Segredos
+.env
+
+# Dados brutos e índice vetorial (reproduzíveis via scripts)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*.parquet
+data/chroma/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
