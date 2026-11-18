@@ -1,0 +1,6 @@
+[client]
+# Oculta o menu/botao "Deploy" (textos em ingles do Streamlit)
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

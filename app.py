@@ -36,9 +36,10 @@ with st.sidebar:
     infer = st.checkbox("Inferir filtros da pergunta", value=True,
                         help="Ex.: 'insatisfeitos' → nota ≤ 2; 'elogios' → nota ≥ 4")
     score = st.slider("Nota da avaliação", 1, 5, (1, 5))
-    cats = st.multiselect("Categoria do produto", categories())
-    delivery = st.multiselect("Situação da entrega", ["atrasado", "no_prazo", "nao_entregue"])
-    years = st.multiselect("Ano da compra", [2016, 2017, 2018])
+    cats = st.multiselect("Categoria do produto", categories(), placeholder="Todas as categorias")
+    delivery = st.multiselect("Situação da entrega", ["atrasado", "no_prazo", "nao_entregue"],
+                              placeholder="Todas as situações")
+    years = st.multiselect("Ano da compra", [2016, 2017, 2018], placeholder="Todos os anos")
     st.divider()
     st.write("LLM:", "✅ " + provider().capitalize() + " configurado" if has_llm() else "⚠️ sem chave — só recuperação")
 
@@ -52,8 +53,8 @@ if delivery:
 if years:
     filters["purchase_year"] = years
 
-ex = st.selectbox("Exemplos", [""] + EXAMPLES)
-question = st.text_input("Pergunta", value=ex)
+ex = st.selectbox("Exemplos", EXAMPLES, index=None, placeholder="Escolha uma pergunta de exemplo")
+question = st.text_input("Pergunta", value=ex or "", placeholder="Digite sua pergunta sobre as avaliações")
 
 if st.button("Perguntar", type="primary") and question.strip():
     # filtro explícito de nota tem prioridade sobre a inferência a partir da pergunta
